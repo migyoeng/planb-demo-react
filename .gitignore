@@ -1,3 +1,23 @@
 # Django
+venv/
+vir_env/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+db.sqlite3
+
+# IDE 설정 파일들
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 데이터베이스 백업 파일들
+*.sql
+*.sqlite3
+*.db
+
+# 캐시 파일들
+.cache/
+*.cache
