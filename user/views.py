@@ -19,7 +19,7 @@ def generate_verification_code():
 def generate_jwt_token(user):
     """JWT 토큰 생성"""
     payload = {
-        'user_id': user.idx,  # idx 필드 사용
+        'user_id': user.idx,
         'username': user.username,
         'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1),
         'iat': datetime.datetime.utcnow()
@@ -46,19 +46,19 @@ def signup(request):
                     'error': '이미 사용 중인 이메일입니다.'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Django 사용자 생성 (기존 DB 스키마에 맞춤)
-            user = User.objects.create(
-                username=serializer.validated_data['username'],
-                userpw=serializer.validated_data['userpw'],  # userpw 필드 사용
-                email=serializer.validated_data['email'],
-                tel=serializer.validated_data['tel'],
-                birth=serializer.validated_data['birth'],
-                gender=serializer.validated_data['gender'],
-                team=serializer.validated_data.get('team', ''),
-                is_staff=0,  # 기본값: 사용자
-                is_active=1,  # 기본값: 활성
-                create_at=timezone.now(),
-                updated_at=timezone.now()
+            # Django 사용자 생성 (새로운 DB 스키마에 맞춤)
+            user_data = serializer.validated_data.copy()
+            password = user_data.pop('password')
+            
+            user = User.objects.create_user(
+                username=user_data['username'],
+                email=user_data['email'],
+                password=password,
+                tel=user_data.get('tel', ''),
+                birth=user_data.get('birth', ''),
+                team=user_data.get('team', ''),
+                name=user_data.get('name', ''),
+                cognito_status='UNCONFIRMED'
             )
             
             # 인증 코드 생성 (24시간 유효)
@@ -95,15 +95,14 @@ def login_view(request):
     serializer = LoginSerializer(data=request.data)
     if serializer.is_valid():
         username = serializer.validated_data['username']
-        userpw = serializer.validated_data['userpw']
+        password = serializer.validated_data['password']
         
         try:
-            # 사용자명으로 사용자 찾기
-            user = User.objects.get(username=username)
+            # Django 기본 인증 시스템 사용
+            user = authenticate(username=username, password=password)
             
-            # 비밀번호 확인 (userpw 필드와 비교)
-            if user.userpw == userpw:
-                if user.is_active == 1:  # 활성 상태 확인
+            if user is not None:
+                if user.is_active:
                     # 마지막 로그인 시간 업데이트
                     user.last_login = timezone.now()
                     user.save()
@@ -125,10 +124,6 @@ def login_view(request):
                     'error': '사용자명 또는 비밀번호가 올바르지 않습니다.'
                 }, status=status.HTTP_401_UNAUTHORIZED)
                 
-        except User.DoesNotExist:
-            return Response({
-                'error': '사용자를 찾을 수 없습니다.'
-            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({
                 'error': f'로그인 실패: {str(e)}'
@@ -165,9 +160,13 @@ def confirm_registration(request):
                     'error': '인증 코드가 만료되었습니다.'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # 인증 완료 처리 (기존 DB에는 이메일 인증 필드가 없으므로 생략)
+            # 인증 완료 처리
             verification.is_used = True
             verification.save()
+            
+            # 사용자 상태를 CONFIRMED로 변경
+            user.cognito_status = 'CONFIRMED'
+            user.save()
             
             return Response({
                 'message': '이메일 인증이 완료되었습니다.'
@@ -235,42 +234,3 @@ def get_user_info(request):
     return Response({
         'error': '토큰이 필요합니다.'
     }, status=status.HTTP_401_UNAUTHORIZED)
-
-# @api_view(['POST'])
-# @permission_classes([AllowAny])
-# def resend_verification(request):
-#     """인증 코드 재발송"""
-#     username = request.data.get('username')
-#     if not username:
-#         return Response({
-#             'error': '사용자명이 필요합니다.'
-#         }, status=status.HTTP_400_BAD_REQUEST)
-    
-#     try:
-#         user = User.objects.get(username=username)
-        
-#         # 기존 인증 코드 비활성화
-#         EmailVerification.objects.filter(user=user).update(is_used=True)
-        
-#         # 새 인증 코드 생성
-#         code = generate_verification_code()
-#         expires_at = timezone.now() + timezone.timedelta(hours=24)
-        
-#         EmailVerification.objects.create(
-#             user=user,
-#             code=code,
-#             expires_at=expires_at
-#         )
-        
-#         # 실제로는 여기서 이메일 발송 로직 구현
-#         print(f"사용자 {user.username}에게 새 인증 코드 {code} 발송")
-        
-#         return Response({
-#             'message': '인증 코드가 재발송되었습니다.',
-#             'verification_code': code  # 테스트용
-#         })
-        
-#     except User.DoesNotExist:
-#         return Response({
-#             'error': '사용자를 찾을 수 없습니다.'
-#         }, status=status.HTTP_404_NOT_FOUND)
