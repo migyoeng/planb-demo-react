@@ -29,6 +29,11 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
+# AWS Cognito 설정
+AWS_REGION = config('AWS_REGION', default='ap-northeast-2')
+AWS_USER_POOL_ID = config('AWS_USER_POOL_ID', default='ap-northeast-2_klXPNN9TV')
+AWS_USER_POOL_CLIENT_ID = config('AWS_USER_POOL_CLIENT_ID', default='31rhkv9td4eq8ba3sqhur2ap0q')
+
 
 # Application definition
 
@@ -151,6 +156,7 @@ CORS_ALLOW_CREDENTIALS = True
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
+        'user.cognito_auth.CognitoJWTAuthentication',  # Cognito JWT 인증으로 교체
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
