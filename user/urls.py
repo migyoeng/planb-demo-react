@@ -2,10 +2,12 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # React에서 Cognito와 통신할 수 있는 URL들
     path('signup/', views.signup, name='signup'),
     path('login/', views.login_view, name='login'),
     path('confirm/', views.confirm_registration, name='confirm'),
-    path('logout/', views.logout_view, name='logout'),
-    path('verify/', views.verify_token, name='verify'),
-    #path('resend/', views.resend_verification, name='resend'),
+    
+    # 사용자 정보 관련 URL들 (Cognito JWT로 인증)
+    path('user/', views.get_user_info, name='user'),
+    path('user/update/', views.update_user_info, name='update_user_info'),
 ]
