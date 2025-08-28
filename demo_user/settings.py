@@ -14,6 +14,9 @@ from pathlib import Path
 from decouple import config
 import os
 
+# 실행포트 설정
+PORT = 8001
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
