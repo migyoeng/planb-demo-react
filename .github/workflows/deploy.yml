@@ -81,7 +81,7 @@ jobs:
         echo "트리거: ${{ github.event.head_commit.author.name }}"
         echo "저장소: ${{ github.repository }}"
         echo "AWS 리전: ${{ env.AWS_REGION }}"
-        echo "====================================="
+        echo "======================================"
         
     - name: Build Details
       run: |
