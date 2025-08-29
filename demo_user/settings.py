@@ -34,8 +34,8 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 # AWS Cognito 설정
 AWS_REGION = config('AWS_REGION', default='ap-northeast-2')
-AWS_USER_POOL_ID = config('AWS_USER_POOL_ID', default='ap-northeast-2_klXPNN9TV')
-AWS_USER_POOL_CLIENT_ID = config('AWS_USER_POOL_CLIENT_ID', default='31rhkv9td4eq8ba3sqhur2ap0q')
+AWS_USER_POOL_ID = config('AWS_USER_POOL_ID', default='ap-northeast-2_KYxl8SX2a')
+AWS_USER_POOL_CLIENT_ID = config('AWS_USER_POOL_CLIENT_ID', default='3a58ij7t5e5va7qjkfdmjsghq')
 
 
 # Application definition
