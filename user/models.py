@@ -8,7 +8,7 @@ class User(AbstractUser):
     cognito_sub = models.CharField(max_length=64, unique=True, null=True, blank=True)
     username = models.CharField(max_length=150, unique=True)
     email = models.CharField(max_length=254)
-    password = models.CharField(max_length=128, default='')  # 기본값 추가
+    password = models.CharField(max_length=128)  # 비밀번호 저장
     date_joined = models.DateTimeField(auto_now_add=True)
     tel = models.CharField(max_length=20, null=True, blank=True)
     birth = models.CharField(max_length=10, null=True, blank=True)
@@ -21,7 +21,7 @@ class User(AbstractUser):
     last_name = None
     
     USERNAME_FIELD = 'username'
-    REQUIRED_FIELDS = ['email', 'password']
+    REQUIRED_FIELDS = ['email', 'password']  # password 다시 추가
     
     class Meta:
         db_table = 'user'  # 새로운 테이블명

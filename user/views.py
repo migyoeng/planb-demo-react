@@ -11,10 +11,28 @@ from .cognito_auth import decode_cognito_jwt
 @permission_classes([AllowAny])
 def signup(request):
     """Cognito 회원가입 - React에서 Cognito와 통신하므로 여기서는 성공 응답만"""
-    return Response({
-        'message': '회원가입은 React에서 Cognito를 통해 처리됩니다.',
-        'status': 'success'
-    }, status=status.HTTP_200_OK)
+    try:
+        user_data = request.data
+        # 사용자 생성 (password도 함께 저장)
+        user = User.objects.create(
+            username=user_data['username'],
+            email=user_data['email'],
+            password=user_data.get('password', ''),  # 비밀번호 저장
+            cognito_sub=user_data.get('cognito_sub', ''),  # Cognito sub 값 저장
+            name=user_data.get('name', user_data['username']),
+            tel=user_data.get('tel', ''),
+            birth=user_data.get('birth', ''),
+            team=user_data.get('team', ''),
+            cognito_status='UNCONFIRMED'
+        )
+        return Response({
+            'message': '회원가입이 완료되었습니다.',
+            'status': 'success'
+        }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({
+            'error': f'회원가입 실패: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])

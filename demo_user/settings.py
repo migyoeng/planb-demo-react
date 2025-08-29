@@ -91,8 +91,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'user_db',
-        'USER': 'demo_user',
-        'PASSWORD': 'soldesk12!!',
+        'USER': 'root',
+        'PASSWORD': 'soldesk12!@',
         'HOST': '127.0.0.1',
         'PORT': 3306,
         'OPTIONS': {
