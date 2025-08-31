@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -17,7 +18,7 @@ def signup(request):
         user = User.objects.create(
             username=user_data['username'],
             email=user_data['email'],
-            password=user_data.get('password', ''),  # 비밀번호 저장
+            password=make_password(user_data.get('password', '')),  # 비밀번호 암호화하여 저장
             cognito_sub=user_data.get('cognito_sub', ''),  # Cognito sub 값 저장
             name=user_data.get('name', user_data['username']),
             tel=user_data.get('tel', ''),
