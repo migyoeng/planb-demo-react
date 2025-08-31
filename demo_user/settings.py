@@ -147,9 +147,16 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS 설정
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS 설정 (React와 연동)
+CORS_ALLOWED_ORIGINS = [
+    "https://d18wspy7xouagh.cloudfront.net",
+    "http://localhost:5173",  # React 개발 서버
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",  # 추가 React 포트
+    "http://127.0.0.1:3000",
+]
 
+# CORS 설정
 CORS_ALLOW_CREDENTIALS = True
 
 # REST Framework 설정
