@@ -5,7 +5,7 @@ from django.core.validators import RegexValidator
 class User(AbstractUser):
     # 새로운 DB 스키마에 맞춘 필드들
     idx = models.BigAutoField(primary_key=True)
-    cognito_sub = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    cognito_sub = models.CharField(max_length=128, unique=True, null=True, blank=True)
     username = models.CharField(max_length=150, unique=True)
     email = models.CharField(max_length=254)
     password = models.CharField(max_length=128)  # 비밀번호 저장
