@@ -37,6 +37,9 @@ AWS_REGION = config('AWS_REGION', default='ap-northeast-2')
 AWS_USER_POOL_ID = config('AWS_USER_POOL_ID', default='ap-northeast-2_KYxl8SX2a')
 AWS_USER_POOL_CLIENT_ID = config('AWS_USER_POOL_CLIENT_ID', default='3a58ij7t5e5va7qjkfdmjsghq')
 
+# AWS 계정 ID (Cognito 사용자 삭제용)
+AWS_ACCOUNT_ID = config('AWS_ACCOUNT_ID', default='726629337826')  # ⚠️ 실제 AWS 계정 ID로 교체
+
 
 # Application definition
 

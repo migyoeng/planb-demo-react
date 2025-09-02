@@ -7,6 +7,45 @@ from rest_framework.response import Response
 from .serializers import UserSerializer
 from .models import User
 from .cognito_auth import decode_cognito_jwt
+import boto3
+from botocore.exceptions import ClientError
+
+def delete_cognito_user(username):
+    """Cognito User Pool에서 사용자 삭제"""
+    try:
+        # AWS 설정값들 - settings에서 가져오기
+        AWS_REGION = settings.AWS_REGION
+        USER_POOL_ID = settings.AWS_USER_POOL_ID
+        
+        print(f"[COGNITO DELETE] AWS 설정 - Region: {AWS_REGION}, UserPoolId: {USER_POOL_ID}")
+        
+        # Cognito Identity Provider 클라이언트 생성
+        cognito_client = boto3.client('cognito-idp', region_name=AWS_REGION)
+        
+        print(f"[COGNITO DELETE] Cognito 사용자 삭제 시도 - username: {username}")
+        
+        # Admin 권한으로 사용자 삭제
+        response = cognito_client.admin_delete_user(
+            UserPoolId=USER_POOL_ID,
+            Username=username
+        )
+        
+        print(f"[COGNITO DELETE] Cognito 사용자 삭제 성공 - username: {username}")
+        return True, "Cognito 사용자 삭제 성공"
+        
+    except ClientError as e:
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        print(f"[COGNITO DELETE] Cognito 사용자 삭제 실패 - {error_code}: {error_message}")
+        
+        if error_code == 'UserNotFoundException':
+            return True, "사용자가 Cognito에 존재하지 않음 (이미 삭제됨)"
+        else:
+            return False, f"Cognito 삭제 실패: {error_message}"
+            
+    except Exception as e:
+        print(f"[COGNITO DELETE] 예상치 못한 오류: {str(e)}")
+        return False, f"Cognito 삭제 중 오류: {str(e)}"
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
@@ -159,4 +198,101 @@ def update_user_info(request):
     except Exception as e:
         return Response({
             'error': f'사용자 정보 업데이트 실패: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_user_account(request):
+    """사용자 계정 삭제 - Django + Cognito 모두 삭제"""
+    try:
+        # Cognito JWT 토큰에서 사용자 정보 추출
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return Response({
+                'error': '토큰이 필요합니다.'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        token = auth_header.split(' ')[1]
+        
+        # Cognito JWT 토큰 검증
+        payload = decode_cognito_jwt(token)
+        username = payload.get('cognito:username')
+        
+        if not username:
+            return Response({
+                'error': '사용자명을 찾을 수 없습니다.'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        print(f"[DELETE DEBUG] 계정 삭제 요청 - username: {username}")
+        
+        # Django 사용자 조회
+        try:
+            user = User.objects.get(username=username)
+            user_id = user.idx
+            user_email = user.email
+        except User.DoesNotExist:
+            return Response({
+                'error': '사용자를 찾을 수 없습니다.'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # 1단계: Cognito에서 사용자 삭제 시도
+        cognito_success, cognito_message = delete_cognito_user(username)
+        
+        # 2단계: Django에서 사용자 삭제
+        django_success = False
+        django_message = ""
+        
+        try:
+            user.delete()  # CASCADE로 관련 데이터도 함께 삭제됨
+            django_success = True
+            django_message = "Django 사용자 삭제 성공"
+            print(f"[DELETE DEBUG] Django 사용자 삭제 완료 - ID: {user_id}, Email: {user_email}")
+        except Exception as e:
+            django_message = f"Django 삭제 실패: {str(e)}"
+            print(f"[DELETE DEBUG] Django 사용자 삭제 실패: {str(e)}")
+        
+        # 결과 분석 및 응답
+        if cognito_success and django_success:
+            return Response({
+                'message': '계정이 완전히 삭제되었습니다.',
+                'details': {
+                    'cognito_status': cognito_message,
+                    'django_status': django_message,
+                    'deleted_user_id': user_id
+                }
+            }, status=status.HTTP_200_OK)
+        
+        elif django_success and not cognito_success:
+            return Response({
+                'message': 'Django에서는 삭제되었지만 Cognito 삭제에 실패했습니다.',
+                'warning': 'Cognito 계정이 남아있을 수 있습니다.',
+                'details': {
+                    'cognito_status': cognito_message,
+                    'django_status': django_message,
+                    'deleted_user_id': user_id
+                }
+            }, status=status.HTTP_206_PARTIAL_CONTENT)
+        
+        elif cognito_success and not django_success:
+            return Response({
+                'error': 'Cognito는 삭제되었지만 Django 삭제에 실패했습니다.',
+                'details': {
+                    'cognito_status': cognito_message,
+                    'django_status': django_message
+                }
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        else:
+            return Response({
+                'error': '계정 삭제에 실패했습니다.',
+                'details': {
+                    'cognito_status': cognito_message,
+                    'django_status': django_message
+                }
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    except Exception as e:
+        print(f"[DELETE DEBUG] 예상치 못한 오류: {str(e)}")
+        return Response({
+            'error': f'계정 삭제 중 오류 발생: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
