@@ -50,3 +50,7 @@ class EmailVerification(models.Model):
     def is_expired(self):
         from django.utils import timezone
         return timezone.now() > self.expires_at
+
+# python manage.py inspectdb event_schedule event_predict event_coupon > temp_models.py
+# 생성된 모델들을 이 파일에 복사하고 managed = False 설정
+# 
