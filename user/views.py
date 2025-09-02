@@ -9,6 +9,7 @@ from .models import User
 from .cognito_auth import decode_cognito_jwt
 import boto3
 from botocore.exceptions import ClientError
+import requests
 
 def delete_cognito_user(username):
     """Cognito User Pool에서 사용자 삭제"""
@@ -295,4 +296,91 @@ def delete_user_account(request):
         print(f"[DELETE DEBUG] 예상치 못한 오류: {str(e)}")
         return Response({
             'error': f'계정 삭제 중 오류 발생: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_events(request):
+    """사용자 이벤트 참여내역 조회 - event-msa API 호출"""
+    try:
+        # Cognito JWT 토큰에서 사용자 정보 추출
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return Response({
+                'error': '토큰이 필요합니다.'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        token = auth_header.split(' ')[1]
+        
+        # Cognito JWT 토큰 검증
+        payload = decode_cognito_jwt(token)
+        username = payload.get('cognito:username')
+        
+        if not username:
+            return Response({
+                'error': '사용자명을 찾을 수 없습니다.'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        print(f"[USER EVENTS] 사용자 이벤트 참여내역 조회 - username: {username}")
+        
+        # Django 사용자 조회
+        try:
+            user = User.objects.get(username=username)
+            user_id = user.idx
+        except User.DoesNotExist:
+            return Response({
+                'error': '사용자를 찾을 수 없습니다.'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # event-msa API 호출
+        try:
+            # settings에서 Event MSA URL 가져오기
+            from django.conf import settings
+            EVENT_MSA_URL = settings.EVENT_MSA_URL
+            
+            # 사용자의 이벤트 참여내역 조회 API 호출
+            response = requests.get(
+                f'{EVENT_MSA_URL}/api/event/user-history/',  # 새로 만들 API
+                headers={
+                    'Authorization': f'Bearer {token}',
+                    'Content-Type': 'application/json'
+                },
+                params={'user_id': user_id},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                event_data = response.json()
+                print(f"[USER EVENTS] event-msa API 호출 성공 - 참여내역: {len(event_data.get('events', []))}개")
+                
+                return Response({
+                    'message': '이벤트 참여내역 조회 성공',
+                    'user_info': {
+                        'username': username,
+                        'user_id': user_id
+                    },
+                    'events': event_data.get('events', []),
+                    'statistics': event_data.get('statistics', {})
+                }, status=status.HTTP_200_OK)
+            
+            else:
+                print(f"[USER EVENTS] event-msa API 호출 실패 - Status: {response.status_code}")
+                return Response({
+                    'message': '이벤트 참여내역을 가져올 수 없습니다.',
+                    'events': [],
+                    'statistics': {}
+                }, status=status.HTTP_200_OK)  # 부분 실패로 처리
+                
+        except requests.exceptions.RequestException as e:
+            print(f"[USER EVENTS] event-msa API 호출 오류: {str(e)}")
+            return Response({
+                'message': '이벤트 서비스와 연결할 수 없습니다.',
+                'events': [],
+                'statistics': {}
+            }, status=status.HTTP_200_OK)  # 부분 실패로 처리
+        
+    except Exception as e:
+        print(f"[USER EVENTS] 예상치 못한 오류: {str(e)}")
+        return Response({
+            'error': f'이벤트 참여내역 조회 중 오류 발생: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -40,6 +40,9 @@ AWS_USER_POOL_CLIENT_ID = config('AWS_USER_POOL_CLIENT_ID', default='3a58ij7t5e5
 # AWS 계정 ID (Cognito 사용자 삭제용)
 AWS_ACCOUNT_ID = config('AWS_ACCOUNT_ID', default='726629337826')  # ⚠️ 실제 AWS 계정 ID로 교체
 
+# Event MSA API URL 설정
+EVENT_MSA_URL = config('EVENT_MSA_URL', default='https://42z6qi4fnd.execute-api.ap-northeast-2.amazonaws.com/prod')
+
 
 # Application definition
 
