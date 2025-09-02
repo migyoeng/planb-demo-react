@@ -326,7 +326,8 @@ def get_user_events(request):
         # Django 사용자 조회
         try:
             user = User.objects.get(username=username)
-            user_id = user.idx
+            # event-msa에서는 username을 user_id로 사용하므로 username을 전송
+            user_id = username  # user.idx 대신 username 사용
         except User.DoesNotExist:
             return Response({
                 'error': '사용자를 찾을 수 없습니다.'
