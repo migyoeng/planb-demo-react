@@ -393,3 +393,114 @@ def get_user_events(request):
         return Response({
             'error': f'이벤트 참여내역 조회 중 오류 발생: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_coupons(request):
+    """사용자 보유 쿠폰 현황 조회 - user DB에서 직접 조회"""
+    try:
+        # Cognito JWT 토큰에서 사용자 정보 추출
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return Response({
+                'error': '토큰이 필요합니다.'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        token = auth_header.split(' ')[1]
+        
+        # Cognito JWT 토큰 검증
+        payload = decode_cognito_jwt(token)
+        username = payload.get('cognito:username')
+        
+        if not username:
+            return Response({
+                'error': '사용자명을 찾을 수 없습니다.'
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        print(f"[USER COUPONS] 사용자 쿠폰 현황 조회 - username: {username}")
+        
+        # Django 사용자 조회
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({
+                'error': '사용자를 찾을 수 없습니다.'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # 사용자의 모든 쿠폰 조회 (최신순)
+        # TODO: DMS 동기화 완료 후 활성화
+        # from .models import Coupon, Predict, Schedule
+        from django.utils import timezone
+        
+        # 임시로 빈 쿠폰 리스트 반환 (DMS 완료 전)
+        user_coupons = []  # Coupon.objects.filter(user_id=username).select_related('predict__schedule').order_by('-created_at')
+        
+        coupons = []
+        total_coupons = 0
+        used_coupons = 0
+        available_coupons = 0
+        expired_coupons = 0
+        
+        now = timezone.now()
+        
+        for coupon in user_coupons:
+            # 쿠폰 상태 판정
+            if coupon.is_used:
+                status_text = "사용완료"
+                status_class = "used"
+                used_coupons += 1
+            elif coupon.expires_at < now:
+                status_text = "기간만료"
+                status_class = "expired"
+                expired_coupons += 1
+            else:
+                status_text = "사용가능"
+                status_class = "available"
+                available_coupons += 1
+            
+            coupon_data = {
+                'coupon_id': coupon.idx,
+                'coupon_name': coupon.coupon_name,
+                'coupon_type': coupon.coupon_type,
+                'discount_amount': coupon.discount_amount,
+                'status': status_text,
+                'status_class': status_class,
+                'is_used': coupon.is_used,
+                'used_at': coupon.used_at,
+                'expires_at': coupon.expires_at,
+                'created_at': coupon.created_at,
+                'predict_info': {
+                    'match_date': coupon.predict.schedule.match_date,
+                    'home_team': coupon.predict.schedule.homeTeamName,
+                    'away_team': coupon.predict.schedule.awayTeamName,
+                    'predicted': coupon.predict.predicted
+                }
+            }
+            coupons.append(coupon_data)
+            total_coupons += 1
+        
+        # 통계 계산
+        statistics = {
+            'total_coupons': total_coupons,
+            'available_coupons': available_coupons,
+            'used_coupons': used_coupons,
+            'expired_coupons': expired_coupons
+        }
+        
+        print(f"[USER COUPONS] 조회 완료 - 총 {total_coupons}개, 사용가능 {available_coupons}개")
+        
+        return Response({
+            'message': '쿠폰 현황 조회 성공',
+            'user_info': {
+                'username': username,
+                'user_id': user.idx
+            },
+            'coupons': coupons,
+            'statistics': statistics
+        }, status=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"[USER COUPONS] 예상치 못한 오류: {str(e)}")
+        return Response({
+            'error': f'쿠폰 현황 조회 중 오류 발생: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
