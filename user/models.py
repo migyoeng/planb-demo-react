@@ -22,7 +22,7 @@ class User(AbstractUser):
     last_login = None  # last_login 필드 제거
     is_staff = None    # is_staff 필드 제거
     is_active = None   # is_active 필드 제거  
-    is_superuser = None # is_superuser 필드 제거
+    # is_superuser는 관리자 구분용으로 유지
     
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email', 'password']  # password 다시 추가
