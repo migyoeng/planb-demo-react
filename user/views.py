@@ -13,7 +13,23 @@ from .cognito_auth import decode_cognito_jwt
 def signup(request):
     """Cognito 회원가입 - React에서 Cognito와 통신하므로 여기서는 성공 응답만"""
     try:
+        print(f"[SIGNUP DEBUG] API 호출됨 - Method: {request.method}")
+        print(f"[SIGNUP DEBUG] Headers: {dict(request.headers)}")
+        print(f"[SIGNUP DEBUG] Request data: {request.data}")
+        
         user_data = request.data
+        
+        # 필수 필드 확인
+        required_fields = ['username', 'email']
+        for field in required_fields:
+            if not user_data.get(field):
+                print(f"[SIGNUP DEBUG] 필수 필드 누락: {field}")
+                return Response({
+                    'error': f'필수 필드가 누락되었습니다: {field}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
+        print(f"[SIGNUP DEBUG] 사용자 생성 시도 - username: {user_data.get('username')}")
+        
         # 사용자 생성 (password도 함께 저장)
         user = User.objects.create(
             username=user_data['username'],
@@ -26,11 +42,17 @@ def signup(request):
             team=user_data.get('team', ''),
             cognito_status='UNCONFIRMED'
         )
+        
+        print(f"[SIGNUP DEBUG] 사용자 생성 성공 - ID: {user.idx}, username: {user.username}")
+        
         return Response({
             'message': '회원가입이 완료되었습니다.',
-            'status': 'success'
+            'status': 'success',
+            'user_id': user.idx
         }, status=status.HTTP_201_CREATED)
     except Exception as e:
+        print(f"[SIGNUP DEBUG] 회원가입 실패: {str(e)}")
+        print(f"[SIGNUP DEBUG] Exception type: {type(e)}")
         return Response({
             'error': f'회원가입 실패: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
