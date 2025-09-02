@@ -6,9 +6,9 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'idx', 'username', 'email', 'tel', 'birth', 'team', 'name',
-            'date_joined', 'cognito_sub', 'cognito_status', 'is_active', 'last_login'
+            'date_joined', 'cognito_sub', 'cognito_status'
         ]
-        read_only_fields = ['idx', 'date_joined', 'last_login', 'cognito_sub', 'cognito_status']
+        read_only_fields = ['idx', 'date_joined', 'cognito_sub', 'cognito_status']
 class SignupSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(max_length=128, write_only=True)

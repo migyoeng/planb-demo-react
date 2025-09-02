@@ -19,6 +19,10 @@ class User(AbstractUser):
     # Django AbstractUser와 충돌하는 필드들 재정의
     first_name = None
     last_name = None
+    last_login = None  # last_login 필드 제거
+    is_staff = None    # is_staff 필드 제거
+    is_active = None   # is_active 필드 제거  
+    is_superuser = None # is_superuser 필드 제거
     
     USERNAME_FIELD = 'username'
     REQUIRED_FIELDS = ['email', 'password']  # password 다시 추가
