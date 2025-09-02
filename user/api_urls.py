@@ -10,4 +10,5 @@ urlpatterns = [
     # 사용자 정보 관련 API들
     path('user/profile/', views.get_user_info, name='user_info'),
     path('user/update/', views.update_user_info, name='update_user_info'),
+    path('user/delete/', views.delete_user_account, name='delete_user_account'),
 ]
