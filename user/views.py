@@ -350,6 +350,9 @@ def get_user_events(request):
                 timeout=10
             )
             
+            print(f"[USER EVENTS] event-msa API 응답 상태: {response.status_code}")
+            print(f"[USER EVENTS] event-msa API 응답 내용: {response.text}")
+            
             if response.status_code == 200:
                 event_data = response.json()
                 print(f"[USER EVENTS] event-msa API 호출 성공 - 참여내역: {len(event_data.get('events', []))}개")
@@ -366,10 +369,15 @@ def get_user_events(request):
             
             else:
                 print(f"[USER EVENTS] event-msa API 호출 실패 - Status: {response.status_code}")
+                print(f"[USER EVENTS] 실패 응답 내용: {response.text}")
                 return Response({
                     'message': '이벤트 참여내역을 가져올 수 없습니다.',
                     'events': [],
-                    'statistics': {}
+                    'statistics': {},
+                    'debug_info': {
+                        'status_code': response.status_code,
+                        'response_text': response.text
+                    }
                 }, status=status.HTTP_200_OK)  # 부분 실패로 처리
                 
         except requests.exceptions.RequestException as e:
