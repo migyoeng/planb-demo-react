@@ -301,7 +301,7 @@ def delete_user_account(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_events(request):
-    """사용자 이벤트 참여내역 조회 - event-msa API 호출"""
+    """사용자 이벤트 참여내역 조회 - DMS 모델 구현 후 직접 DB 조회 예정"""
     try:
         # Cognito JWT 토큰에서 사용자 정보 추출
         auth_header = request.headers.get('Authorization')
@@ -333,60 +333,23 @@ def get_user_events(request):
                 'error': '사용자를 찾을 수 없습니다.'
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # event-msa API 호출
-        try:
-            # settings에서 Event MSA URL 가져오기
-            from django.conf import settings
-            EVENT_MSA_URL = settings.EVENT_MSA_URL
-            
-            # 사용자의 이벤트 참여내역 조회 API 호출
-            response = requests.get(
-                f'{EVENT_MSA_URL}/api/event/user-history/',  # 새로 만들 API
-                headers={
-                    'Authorization': f'Bearer {token}',
-                    'Content-Type': 'application/json'
-                },
-                params={'user_id': user_id},
-                timeout=10
-            )
-            
-            print(f"[USER EVENTS] event-msa API 응답 상태: {response.status_code}")
-            print(f"[USER EVENTS] event-msa API 응답 내용: {response.text}")
-            
-            if response.status_code == 200:
-                event_data = response.json()
-                print(f"[USER EVENTS] event-msa API 호출 성공 - 참여내역: {len(event_data.get('events', []))}개")
-                
-                return Response({
-                    'message': '이벤트 참여내역 조회 성공',
-                    'user_info': {
-                        'username': username,
-                        'user_id': user_id
-                    },
-                    'events': event_data.get('events', []),
-                    'statistics': event_data.get('statistics', {})
-                }, status=status.HTTP_200_OK)
-            
-            else:
-                print(f"[USER EVENTS] event-msa API 호출 실패 - Status: {response.status_code}")
-                print(f"[USER EVENTS] 실패 응답 내용: {response.text}")
-                return Response({
-                    'message': '이벤트 참여내역을 가져올 수 없습니다.',
-                    'events': [],
-                    'statistics': {},
-                    'debug_info': {
-                        'status_code': response.status_code,
-                        'response_text': response.text
-                    }
-                }, status=status.HTTP_200_OK)  # 부분 실패로 처리
-                
-        except requests.exceptions.RequestException as e:
-            print(f"[USER EVENTS] event-msa API 호출 오류: {str(e)}")
-            return Response({
-                'message': '이벤트 서비스와 연결할 수 없습니다.',
-                'events': [],
-                'statistics': {}
-            }, status=status.HTTP_200_OK)  # 부분 실패로 처리
+        # TODO: DMS 테이블 모델 생성 후 직접 DB 조회로 변경
+        # 현재는 임시로 빈 데이터 반환
+        print(f"[USER EVENTS] DMS 테이블 모델 미구현 - 임시 빈 데이터 반환")
+        
+        return Response({
+            'message': '이벤트 참여내역 조회 (DMS 모델 구현 필요)',
+            'user_info': {
+                'username': username,
+                'user_id': user_id
+            },
+            'events': [],
+            'statistics': {
+                'total_predictions': 0,
+                'correct_predictions': 0,
+                'accuracy': 0
+            }
+        }, status=status.HTTP_200_OK)
         
     except Exception as e:
         print(f"[USER EVENTS] 예상치 못한 오류: {str(e)}")
@@ -397,7 +360,7 @@ def get_user_events(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_coupons(request):
-    """사용자 보유 쿠폰 현황 조회 - user DB에서 직접 조회"""
+    """사용자 보유 쿠폰 현황 조회 - DMS 모델 구현 후 직접 DB 조회 예정"""
     try:
         # Cognito JWT 토큰에서 사용자 정보 추출
         auth_header = request.headers.get('Authorization')
@@ -427,13 +390,12 @@ def get_user_coupons(request):
                 'error': '사용자를 찾을 수 없습니다.'
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # 사용자의 모든 쿠폰 조회 (최신순)
         # TODO: DMS 동기화 완료 후 활성화
-        # from .models import Coupon, Predict, Schedule
+        # from .models import EventCoupon, EventPredict, EventSchedule
         from django.utils import timezone
         
-        # 임시로 빈 쿠폰 리스트 반환 (DMS 완료 전)
-        user_coupons = []  # Coupon.objects.filter(user_id=username).select_related('predict__schedule').order_by('-created_at')
+        # 임시로 빈 쿠폰 리스트 반환 (DMS 모델 구현 전)
+        user_coupons = []
         
         coupons = []
         total_coupons = 0
@@ -445,7 +407,8 @@ def get_user_coupons(request):
         
         for coupon in user_coupons:
             # 쿠폰 상태 판정
-            if coupon.is_used:
+            is_used = coupon.used_at is not None
+            if is_used:
                 status_text = "사용완료"
                 status_class = "used"
                 used_coupons += 1
@@ -458,23 +421,28 @@ def get_user_coupons(request):
                 status_class = "available"
                 available_coupons += 1
             
+            # 예측 정보 구성
+            predict_info = None
+            if coupon.predict and coupon.predict.schedule:
+                predict_info = {
+                    'game_date': coupon.predict.schedule.game_date.isoformat() if coupon.predict.schedule.game_date else None,
+                    'home_team': coupon.predict.schedule.home_team_name or coupon.predict.schedule.home_team,
+                    'away_team': coupon.predict.schedule.away_team_name or coupon.predict.schedule.away_team,
+                    'predicted': coupon.predict.predicted_winner
+                }
+            
             coupon_data = {
-                'coupon_id': coupon.idx,
+                'coupon_id': coupon.id,
                 'coupon_name': coupon.coupon_name,
                 'coupon_type': coupon.coupon_type,
                 'discount_amount': coupon.discount_amount,
                 'status': status_text,
                 'status_class': status_class,
-                'is_used': coupon.is_used,
-                'used_at': coupon.used_at,
-                'expires_at': coupon.expires_at,
-                'created_at': coupon.created_at,
-                'predict_info': {
-                    'match_date': coupon.predict.schedule.match_date,
-                    'home_team': coupon.predict.schedule.homeTeamName,
-                    'away_team': coupon.predict.schedule.awayTeamName,
-                    'predicted': coupon.predict.predicted
-                }
+                'is_used': is_used,
+                'used_at': coupon.used_at.isoformat() if coupon.used_at else None,
+                'expires_at': coupon.expires_at.isoformat(),
+                'created_at': coupon.created_at.isoformat(),
+                'predict_info': predict_info
             }
             coupons.append(coupon_data)
             total_coupons += 1

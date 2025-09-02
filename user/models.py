@@ -50,7 +50,3 @@ class EmailVerification(models.Model):
     def is_expired(self):
         from django.utils import timezone
         return timezone.now() > self.expires_at
-
-# TODO: AWS DMS 동기화 완료 후 다음 명령어로 모델 생성
-# python manage.py inspectdb schedule predict coupon > temp_models.py
-# 생성된 모델들을 이 파일에 복사하고 managed = False 설정
