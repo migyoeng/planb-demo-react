@@ -3,13 +3,19 @@ name: Build and Deploy to AWS ECR
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
 
 env:
   AWS_REGION: ap-northeast-2  # 서울 리전
   ECR_NAMESPACE: plan-b  # ECR 네임스페이스 (조직명)
   ECR_REPOSITORY: user-service
+  ECS_CLUSTER: DUGOUT-CLUSTER
+  ECS_SERVICE: User-Web-Task-service
+  CONTAINER_NAME: user-container
+  SUBNETS: "subnet-00258c4a6ac72c4ce,subnet-0e08b5b05fdad2efc"
+  SECURITY_GROUPS: "sg-0dd82609d8f080a0f"
+  MIGRATE_TASKDEF_FILE: aws/user-migrate-task.json
+  WEB_TASKDEF_FILE: aws/user-web-task.json
+  TARGET_GROUP_ARN: "arn:aws:elasticloadbalancing:ap-northeast-2:726629337826:targetgroup/User-TG/31e8920beb393a4f"
 
 jobs:
   build-and-push:
@@ -95,3 +101,159 @@ jobs:
         echo "  - ${{ steps.tags.outputs.short-sha }} (짧은 커밋해시)"
         echo "ECR 저장소: ${{ env.ECR_NAMESPACE }}/${{ env.ECR_REPOSITORY }}"
         echo "============================="
+
+      # 이미지 URI를 다음 job에서 사용할 수 있도록 출력
+    outputs:
+      image-uri: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_NAMESPACE }}/${{ env.ECR_REPOSITORY }}:latest
+
+  migrate-and-deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+        
+    - name: Use image URI from build job
+      id: image
+      run: |
+        IMAGE_URI="${{ needs.build-and-push.outputs.image-uri }}"
+        echo "image-uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+        echo "Using image URI from build job: $IMAGE_URI"
+        
+    - name: Update Task Definition files with new image
+      run: |
+        # 마이그레이션 Task Definition 업데이트
+        sed -i 's|726629337826.dkr.ecr.ap-northeast-2.amazonaws.com/plan-b/user-service:latest|${{ steps.image.outputs.image-uri }}|g' ${{ env.MIGRATE_TASKDEF_FILE }}
+        sed -i 's|726629337826|${{ secrets.AWS_ACCOUNT_ID }}|g' ${{ env.MIGRATE_TASKDEF_FILE }}
+        
+        # 웹 서비스 Task Definition 업데이트
+        sed -i 's|726629337826.dkr.ecr.ap-northeast-2.amazonaws.com/plan-b/user-service:latest|${{ steps.image.outputs.image-uri }}|g' ${{ env.WEB_TASKDEF_FILE }}
+        sed -i 's|726629337826|${{ secrets.AWS_ACCOUNT_ID }}|g' ${{ env.WEB_TASKDEF_FILE }}
+        
+        echo "Task Definition files updated with new image URI"
+        
+    - name: Check if migration needed (first deployment)
+      id: check-migration
+      run: |
+        # ECS 서비스가 존재하는지 확인하여 첫 배포인지 판단
+        if aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_SERVICE }} --query 'services[0].status' --output text 2>/dev/null | grep -q "ACTIVE"; then
+          echo "migration-needed=false" >> $GITHUB_OUTPUT
+          echo "ECS service exists, skipping migration"
+        else
+          echo "migration-needed=true" >> $GITHUB_OUTPUT
+          echo "First deployment detected, migration will be executed"
+        fi
+        
+    - name: Register migration task definition
+      if: steps.check-migration.outputs.migration-needed == 'true'
+      id: migrate-task-def
+      run: |
+        TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://${{ env.MIGRATE_TASKDEF_FILE }} --query 'taskDefinition.taskDefinitionArn' --output text)
+        echo "task-def-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+        echo "Migration task definition registered: $TASK_DEF_ARN"
+        
+    - name: Run database migration
+      if: steps.check-migration.outputs.migration-needed == 'true'
+      run: |
+        echo "Starting database migration..."
+        TASK_ARN=$(aws ecs run-task \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --task-definition ${{ steps.migrate-task-def.outputs.task-def-arn }} \
+          --launch-type FARGATE \
+          --network-configuration "awsvpcConfiguration={subnets=[${{ env.SUBNETS }}],securityGroups=[${{ env.SECURITY_GROUPS }}],assignPublicIp=ENABLED}" \
+          --query 'tasks[0].taskArn' --output text)
+        
+        echo "Migration task started: $TASK_ARN"
+        
+        # 마이그레이션 작업 완료 대기
+        echo "Waiting for migration to complete..."
+        aws ecs wait tasks-stopped --cluster ${{ env.ECS_CLUSTER }} --tasks $TASK_ARN
+        
+        # 작업 결과 확인
+        EXIT_CODE=$(aws ecs describe-tasks --cluster ${{ env.ECS_CLUSTER }} --tasks $TASK_ARN --query 'tasks[0].containers[0].exitCode' --output text)
+        if [ "$EXIT_CODE" != "0" ]; then
+          echo "Migration failed with exit code: $EXIT_CODE"
+          exit 1
+        fi
+        
+        echo "Database migration completed successfully"
+        
+    - name: Register web service task definition
+      id: web-task-def
+      run: |
+        TASK_DEF_ARN=$(aws ecs register-task-definition --cli-input-json file://${{ env.WEB_TASKDEF_FILE }} --query 'taskDefinition.taskDefinitionArn' --output text)
+        echo "task-def-arn=$TASK_DEF_ARN" >> $GITHUB_OUTPUT
+        echo "Web service task definition registered: $TASK_DEF_ARN"
+        
+    - name: Check if ECS service exists
+      id: check-service
+      run: |
+        if aws ecs describe-services --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_SERVICE }} --query 'services[0].status' --output text 2>/dev/null | grep -q "ACTIVE"; then
+          echo "service-exists=true" >> $GITHUB_OUTPUT
+          echo "ECS service exists"
+        else
+          echo "service-exists=false" >> $GITHUB_OUTPUT
+          echo "ECS service does not exist"
+        fi
+        
+    - name: Create ECS service (if not exists)
+      if: steps.check-service.outputs.service-exists == 'false'
+      run: |
+        echo "Creating new ECS service..."
+        aws ecs create-service \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --service-name ${{ env.ECS_SERVICE }} \
+          --task-definition ${{ steps.web-task-def.outputs.task-def-arn }} \
+          --desired-count 1 \
+          --launch-type FARGATE \
+          --network-configuration "awsvpcConfiguration={subnets=[${{ env.SUBNETS }}],securityGroups=[${{ env.SECURITY_GROUPS }}],assignPublicIp=ENABLED}" \
+          --load-balancers targetGroupArn=${{ env.TARGET_GROUP_ARN }},containerName=${{ env.CONTAINER_NAME }},containerPort=8001 \
+          --health-check-grace-period-seconds 300
+        
+        echo "ECS service created successfully"
+        
+    - name: Update ECS service (if exists)
+      if: steps.check-service.outputs.service-exists == 'true'
+      run: |
+        echo "Updating existing ECS service with new task definition..."
+        aws ecs update-service \
+          --cluster ${{ env.ECS_CLUSTER }} \
+          --service ${{ env.ECS_SERVICE }} \
+          --task-definition ${{ steps.web-task-def.outputs.task-def-arn }} \
+          --force-new-deployment
+        
+        echo "ECS service update initiated"
+        
+    - name: Wait for service stability
+      run: |
+        echo "Waiting for ECS service to reach stable state..."
+        aws ecs wait services-stable --cluster ${{ env.ECS_CLUSTER }} --services ${{ env.ECS_SERVICE }}
+        echo "ECS service is now stable"
+        
+    - name: Deployment Summary
+      run: |
+        echo "===== DEPLOYMENT SUMMARY ====="
+        echo "배포 완료 시간: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "ECS 클러스터: ${{ env.ECS_CLUSTER }}"
+        echo "ECS 서비스: ${{ env.ECS_SERVICE }}"
+        echo "Task Definition: ${{ steps.web-task-def.outputs.task-def-arn }}"
+        echo "이미지: ${{ steps.image.outputs.image-uri }}"
+        if [ "${{ steps.check-migration.outputs.migration-needed }}" == "true" ]; then
+          echo "마이그레이션: 실행됨 (첫 배포)"
+        else
+          echo "마이그레이션: 건너뜀 (서비스 존재)"
+        fi
+        if [ "${{ steps.check-service.outputs.service-exists }}" == "false" ]; then
+          echo "서비스 상태: 새로 생성됨"
+        else
+          echo "서비스 상태: 업데이트됨"
+        fi
+        echo "================================"

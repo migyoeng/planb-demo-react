@@ -1,0 +1,67 @@
+{
+  "family": "User-Migrate-Task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::726629337826:role/DugoutTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::726629337826:role/DugOutTaskRole",
+
+  "containerDefinitions": [
+    {
+      "name": "user-migrate-container",
+      "image": "726629337826.dkr.ecr.ap-northeast-2.amazonaws.com/plan-b/user-service:latest",
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/user-task-migrate",
+          "awslogs-region": "ap-northeast-2",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "environment": [
+        {
+          "name": "DJANGO_SETTINGS_MODULE",
+          "value": "demo_user.settings"
+        },
+        {
+          "name": "PYTHONUNBUFFERED",
+          "value": "1"
+        }
+      ],
+      "command": ["/app/entrypoint-migrate.sh"],
+      "secrets": [
+        {
+          "name": "DB_HOST",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/user/mysql-vm-MALiev:host::"
+        },
+        {
+          "name": "DB_NAME",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/user/mysql-vm-MALiev:dbname::"
+        },
+        {
+          "name": "DB_USER",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/user/mysql-vm-MALiev:username::"
+        },
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/user/mysql-vm-MALiev:password::"
+        },
+        {
+          "name": "AWS_COGNITO_USER_POOL_ID",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/cognito-config-WmvPts:cognito_user_pool_id::"
+        },
+        {
+          "name": "AWS_COGNITO_USER_POOL_CLIENT_ID",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/cognito-config-WmvPts:cognito_client_id::"
+        },
+        {
+          "name": "AWS_COGNITO_REGION",
+          "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/cognito-config-WmvPts:aws_region::"
+        }
+      ]
+    }
+  ]
+}
