@@ -24,7 +24,6 @@ def healthz(_):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('auth/', include('user.urls')),
     path('api/', include('user.api_urls')),
     path('healthz', healthz, name='healthz'),  # ALB 헬스체크용
 ]

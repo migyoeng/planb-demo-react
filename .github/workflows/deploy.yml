@@ -102,7 +102,7 @@ jobs:
         echo "ECR 저장소: ${{ env.ECR_NAMESPACE }}/${{ env.ECR_REPOSITORY }}"
         echo "============================="
 
-      # 이미지 URI를 다음 job에서 사용할 수 있도록 출력
+    # 이미지 URI를 다음 job에서 사용할 수 있도록 출력
     outputs:
       image-uri: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_NAMESPACE }}/${{ env.ECR_REPOSITORY }}:latest
 
