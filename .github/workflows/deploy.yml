@@ -3,6 +3,7 @@ name: Build and Deploy to AWS ECR
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 env:
   AWS_REGION: ap-northeast-2  # 서울 리전
