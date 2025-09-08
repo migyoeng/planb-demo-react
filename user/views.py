@@ -354,7 +354,21 @@ def get_user_events(request):
                 user_predict_count = cursor.fetchone()[0]
                 print(f"[USER EVENTS DEBUG] 사용자 {username}의 예측 수: {user_predict_count}")
                 
-                # 사용자의 예측 기록과 일정 정보를 JOIN으로 조회
+                # 페이지네이션 파라미터 처리
+                page = int(request.GET.get('page', 1))
+                page_size = 5  # 페이지당 5개 항목
+                offset = (page - 1) * page_size
+                
+                # 전체 개수 조회
+                cursor.execute("""
+                    SELECT COUNT(*)
+                    FROM event_predict p
+                    LEFT JOIN event_schedule s ON p.schedule_id = s.idx
+                    WHERE p.user_id = %s
+                """, [username])
+                total_count = cursor.fetchone()[0]
+                
+                # 사용자의 예측 기록과 일정 정보를 JOIN으로 조회 (페이지네이션 적용)
                 # event_predict.user_id = username (로그인 시 입력한 사용자명)
                 cursor.execute("""
                     SELECT 
@@ -374,7 +388,8 @@ def get_user_events(request):
                     LEFT JOIN event_schedule s ON p.schedule_id = s.idx
                     WHERE p.user_id = %s
                     ORDER BY p.created_at DESC
-                """, [username])
+                    LIMIT %s OFFSET %s
+                """, [username, page_size, offset])
                 
                 rows = cursor.fetchall()
                 
@@ -389,7 +404,7 @@ def get_user_events(request):
                     is_finished = (home_result is not None and away_result is not None)
                     
                     # 정답 여부 확인
-                    is_correct = False
+                    is_correct = None  # 기본값을 None으로 변경 (경기 전 상태)
                     actual_winner = None
                     if is_finished:
                         if home_result > away_result:
@@ -436,6 +451,9 @@ def get_user_events(request):
                 
                 print(f"[USER EVENTS] DMS DB 직접 조회 완료 - 총 {total_predictions}개, 정답 {correct_predictions}개, 정답률 {accuracy}%")
                 
+                # 페이지네이션 정보 계산
+                total_pages = (total_count + page_size - 1) // page_size
+                
                 return Response({
                     'message': '이벤트 참여내역 조회 성공 (DMS DB 직접 조회)',
                     'user_info': {
@@ -443,7 +461,15 @@ def get_user_events(request):
                         'user_id': user_id
                     },
                     'events': events,
-                    'statistics': statistics
+                    'statistics': statistics,
+                    'pagination': {
+                        'current_page': page,
+                        'total_pages': total_pages,
+                        'total_count': total_count,
+                        'page_size': page_size,
+                        'has_next': page < total_pages,
+                        'has_previous': page > 1
+                    }
                 }, status=status.HTTP_200_OK)
                 
         except Exception as db_error:
