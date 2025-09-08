@@ -400,22 +400,23 @@ def get_user_events(request):
                 for row in rows:
                     predict_id, user_id, predicted, predict_created_at, schedule_id, match_date, start_time, home_team, away_team, home_result, away_result, game_status = row
                     
-                    # 경기 결과가 있는지 확인
-                    is_finished = (home_result is not None and away_result is not None)
+                    # 경기 결과가 있는지 확인 (gameStatus가 END이고 결과가 있는 경우)
+                    is_finished = (game_status == 'END' and home_result is not None and away_result is not None)
                     
                     # 정답 여부 확인
                     is_correct = None  # 기본값을 None으로 변경 (경기 전 상태)
                     actual_winner = None
                     if is_finished:
+                        # winner 필드 사용 (소문자로 저장됨)
                         if home_result > away_result:
-                            actual_winner = home_team
+                            actual_winner = 'HOME'
                         elif away_result > home_result:
-                            actual_winner = away_team
+                            actual_winner = 'AWAY'
                         else:
                             actual_winner = 'DRAW'
                         
-                        # predicted 값과 실제 승자 비교
-                        is_correct = (predicted == actual_winner)
+                        # predicted 값과 실제 승자 비교 (대소문자 구분 없이)
+                        is_correct = (predicted.upper() == actual_winner.upper())
                         if is_correct:
                             correct_predictions += 1
                     
