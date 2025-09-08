@@ -561,10 +561,27 @@ def get_user_coupons(request):
                         status_text = "사용완료"
                         status_class = "used"
                         used_coupons += 1
-                    elif coupon_status == 0 or (expire_at and expire_at < now):
+                    elif coupon_status == 0:
                         status_text = "기간만료"
                         status_class = "expired"
                         expired_coupons += 1
+                    elif expire_at:
+                        # 시간대 문제 해결: expire_at을 timezone-aware로 변환
+                        from django.utils import timezone
+                        if expire_at.tzinfo is None:
+                            # offset-naive datetime을 timezone-aware로 변환
+                            expire_at_aware = timezone.make_aware(expire_at)
+                        else:
+                            expire_at_aware = expire_at
+                        
+                        if expire_at_aware < now:
+                            status_text = "기간만료"
+                            status_class = "expired"
+                            expired_coupons += 1
+                        else:
+                            status_text = "사용가능"
+                            status_class = "available"
+                            available_coupons += 1
                     else:
                         status_text = "사용가능"
                         status_class = "available"
