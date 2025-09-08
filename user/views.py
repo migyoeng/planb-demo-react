@@ -339,7 +339,23 @@ def get_user_events(request):
         
         try:
             with connection.cursor() as cursor:
+                # 디버깅: 테이블 존재 여부 확인
+                cursor.execute("SHOW TABLES LIKE 'event_%'")
+                tables = cursor.fetchall()
+                print(f"[USER EVENTS DEBUG] Event 테이블들: {tables}")
+                
+                # 디버깅: event_predict 테이블 데이터 확인
+                cursor.execute("SELECT COUNT(*) FROM event_predict")
+                predict_count = cursor.fetchone()[0]
+                print(f"[USER EVENTS DEBUG] event_predict 레코드 수: {predict_count}")
+                
+                # 디버깅: 사용자별 예측 데이터 확인
+                cursor.execute("SELECT COUNT(*) FROM event_predict WHERE user_id = %s", [username])
+                user_predict_count = cursor.fetchone()[0]
+                print(f"[USER EVENTS DEBUG] 사용자 {username}의 예측 수: {user_predict_count}")
+                
                 # 사용자의 예측 기록과 일정 정보를 JOIN으로 조회
+                # event_predict.user_id = username (로그인 시 입력한 사용자명)
                 cursor.execute("""
                     SELECT 
                         p.idx as predict_id,
@@ -432,6 +448,9 @@ def get_user_events(request):
                 
         except Exception as db_error:
             print(f"[USER EVENTS] DMS DB 조회 오류: {str(db_error)}")
+            print(f"[USER EVENTS] 오류 타입: {type(db_error)}")
+            import traceback
+            traceback.print_exc()
             return Response({
                 'message': 'DMS 데이터베이스 조회 중 오류가 발생했습니다.',
                 'events': [],
@@ -492,7 +511,28 @@ def get_user_coupons(request):
         
         try:
             with connection.cursor() as cursor:
+                # 디버깅: 테이블 존재 여부 확인
+                cursor.execute("SHOW TABLES LIKE 'event_%'")
+                tables = cursor.fetchall()
+                print(f"[USER COUPONS DEBUG] Event 테이블들: {tables}")
+                
+                # 디버깅: event_predict 테이블 데이터 확인
+                cursor.execute("SELECT COUNT(*) FROM event_predict")
+                predict_count = cursor.fetchone()[0]
+                print(f"[USER COUPONS DEBUG] event_predict 레코드 수: {predict_count}")
+                
+                # 디버깅: event_coupon 테이블 데이터 확인
+                cursor.execute("SELECT COUNT(*) FROM event_coupon")
+                coupon_count = cursor.fetchone()[0]
+                print(f"[USER COUPONS DEBUG] event_coupon 레코드 수: {coupon_count}")
+                
+                # 디버깅: 사용자별 예측 데이터 확인
+                cursor.execute("SELECT COUNT(*) FROM event_predict WHERE user_id = %s", [username])
+                user_predict_count = cursor.fetchone()[0]
+                print(f"[USER COUPONS DEBUG] 사용자 {username}의 예측 수: {user_predict_count}")
+                
                 # 사용자의 쿠폰과 예측, 일정 정보를 JOIN으로 조회
+                # event_predict.user_id = username (로그인 시 입력한 사용자명)
                 cursor.execute("""
                     SELECT 
                         c.idx as coupon_id,
@@ -558,6 +598,9 @@ def get_user_coupons(request):
                     
         except Exception as sql_error:
             print(f"[USER COUPONS] SQL 쿼리 오류: {str(sql_error)}")
+            print(f"[USER COUPONS] 오류 타입: {type(sql_error)}")
+            import traceback
+            traceback.print_exc()
             # 에러 발생 시 빈 데이터로 계속 진행
         
         # 통계 계산
