@@ -301,7 +301,7 @@ def delete_user_account(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_events(request):
-    """사용자 이벤트 참여내역 조회 - DMS 모델 구현 후 직접 DB 조회 예정"""
+    """사용자 이벤트 참여내역 조회 - 임시로 간단한 응답만 반환"""
     try:
         # Cognito JWT 토큰에서 사용자 정보 추출
         auth_header = request.headers.get('Authorization')
@@ -323,167 +323,28 @@ def get_user_events(request):
         
         print(f"[USER EVENTS] 사용자 이벤트 참여내역 조회 - username: {username}")
         
-        # Django 사용자 조회
-        try:
-            user = User.objects.get(username=username)
-            # event-msa에서는 username을 user_id로 사용하므로 username을 전송
-            user_id = username  # user.idx 대신 username 사용
-        except User.DoesNotExist:
-            return Response({
-                'error': '사용자를 찾을 수 없습니다.'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        # DMS 테이블에서 직접 SQL 쿼리로 조회
-        from django.db import connection
-        from django.utils import timezone
-        
-        try:
-            with connection.cursor() as cursor:
-                # 디버깅: 테이블 존재 여부 확인
-                cursor.execute("SHOW TABLES LIKE 'event_%'")
-                tables = cursor.fetchall()
-                print(f"[USER EVENTS DEBUG] Event 테이블들: {tables}")
-                
-                # 디버깅: event_predict 테이블 데이터 확인
-                cursor.execute("SELECT COUNT(*) FROM event_predict")
-                predict_count = cursor.fetchone()[0]
-                print(f"[USER EVENTS DEBUG] event_predict 레코드 수: {predict_count}")
-                
-                # 디버깅: 사용자별 예측 데이터 확인
-                cursor.execute("SELECT COUNT(*) FROM event_predict WHERE user_id = %s", [username])
-                user_predict_count = cursor.fetchone()[0]
-                print(f"[USER EVENTS DEBUG] 사용자 {username}의 예측 수: {user_predict_count}")
-                
-                # 페이지네이션 파라미터 처리
-                page = int(request.GET.get('page', 1))
-                page_size = 5  # 페이지당 5개 항목
-                offset = (page - 1) * page_size
-                
-                # 전체 개수 조회
-                cursor.execute("""
-                    SELECT COUNT(*)
-                    FROM event_predict p
-                    LEFT JOIN event_schedule s ON p.schedule_id = s.idx
-                    WHERE p.user_id = %s
-                """, [username])
-                total_count = cursor.fetchone()[0]
-                
-                # 사용자의 예측 기록과 일정 정보를 JOIN으로 조회 (페이지네이션 적용)
-                # event_predict.user_id = username (로그인 시 입력한 사용자명)
-                cursor.execute("""
-                    SELECT 
-                        p.idx as predict_id,
-                        p.user_id,
-                        p.predicted,
-                        p.created_at as predict_created_at,
-                        s.idx as schedule_id,
-                        s.match_date,
-                        s.startTime,
-                        s.homeTeamName,
-                        s.awayTeamName,
-                        s.homeResult,
-                        s.awayResult,
-                        s.gameStatus
-                    FROM event_predict p
-                    LEFT JOIN event_schedule s ON p.schedule_id = s.idx
-                    WHERE p.user_id = %s
-                    ORDER BY p.created_at DESC
-                    LIMIT %s OFFSET %s
-                """, [username, page_size, offset])
-                
-                rows = cursor.fetchall()
-                
-                events = []
-                total_predictions = 0
-                correct_predictions = 0
-                
-                for row in rows:
-                    predict_id, user_id, predicted, predict_created_at, schedule_id, match_date, start_time, home_team, away_team, home_result, away_result, game_status = row
-                    
-                    # 경기 결과가 있는지 확인 (gameStatus가 END이고 결과가 있는 경우)
-                    is_finished = (game_status == 'END' and home_result is not None and away_result is not None)
-                    
-                    # 정답 여부 확인
-                    is_correct = None  # 기본값을 None으로 변경 (경기 전 상태)
-                    actual_winner = None
-                    if is_finished:
-                        # winner 필드 사용 (소문자로 저장됨)
-                        if home_result > away_result:
-                            actual_winner = 'HOME'
-                        elif away_result > home_result:
-                            actual_winner = 'AWAY'
-                        else:
-                            actual_winner = 'DRAW'
-                        
-                        # predicted 값과 실제 승자 비교 (대소문자 구분 없이)
-                        is_correct = (predicted.upper() == actual_winner.upper())
-                        if is_correct:
-                            correct_predictions += 1
-                    
-                    total_predictions += 1
-                    
-                    events.append({
-                        'predict_id': predict_id,
-                        'predicted_winner': predicted,
-                        'actual_winner': actual_winner,
-                        'is_correct': is_correct,
-                        'is_finished': is_finished,
-                        'created_at': predict_created_at.isoformat() if predict_created_at else None,
-                        'schedule': {
-                            'id': schedule_id,
-                            'home_team': home_team,
-                            'away_team': away_team,
-                            'home_result': home_result,
-                            'away_result': away_result,
-                            'game_date': match_date.isoformat() if match_date else None,
-                            'start_time': start_time,
-                            'status': game_status
-                        }
-                    })
-                
-                # 통계 계산
-                accuracy = round((correct_predictions / total_predictions * 100), 1) if total_predictions > 0 else 0
-                
-                statistics = {
-                    'total_predictions': total_predictions,
-                    'correct_predictions': correct_predictions,
-                    'accuracy': accuracy
-                }
-                
-                print(f"[USER EVENTS] DMS DB 직접 조회 완료 - 총 {total_predictions}개, 정답 {correct_predictions}개, 정답률 {accuracy}%")
-                
-                # 페이지네이션 정보 계산
-                total_pages = (total_count + page_size - 1) // page_size
-                
-                return Response({
-                    'message': '이벤트 참여내역 조회 성공 (DMS DB 직접 조회)',
-                    'user_info': {
-                        'username': username,
-                        'user_id': user_id
-                    },
-                    'events': events,
-                    'statistics': statistics,
-                    'pagination': {
-                        'current_page': page,
-                        'total_pages': total_pages,
-                        'total_count': total_count,
-                        'page_size': page_size,
-                        'has_next': page < total_pages,
-                        'has_previous': page > 1
-                    }
-                }, status=status.HTTP_200_OK)
-                
-        except Exception as db_error:
-            print(f"[USER EVENTS] DMS DB 조회 오류: {str(db_error)}")
-            print(f"[USER EVENTS] 오류 타입: {type(db_error)}")
-            import traceback
-            traceback.print_exc()
-            return Response({
-                'message': 'DMS 데이터베이스 조회 중 오류가 발생했습니다.',
-                'events': [],
-                'statistics': {},
-                'error_detail': str(db_error)
-            }, status=status.HTTP_200_OK)
+        # 임시로 빈 데이터 반환 (성능 최적화)
+        return Response({
+            'message': '이벤트 참여내역 조회 성공 (임시 응답)',
+            'user_info': {
+                'username': username,
+                'user_id': username
+            },
+            'events': [],
+            'statistics': {
+                'total_predictions': 0,
+                'correct_predictions': 0,
+                'accuracy': 0
+            },
+            'pagination': {
+                'current_page': 1,
+                'total_pages': 1,
+                'total_count': 0,
+                'page_size': 5,
+                'has_next': False,
+                'has_previous': False
+            }
+        }, status=status.HTTP_200_OK)
         
     except Exception as e:
         print(f"[USER EVENTS] 예상치 못한 오류: {str(e)}")
@@ -494,7 +355,7 @@ def get_user_events(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user_coupons(request):
-    """사용자 보유 쿠폰 현황 조회 - DMS 모델 구현 후 직접 DB 조회 예정"""
+    """사용자 보유 쿠폰 현황 조회 - 임시로 간단한 응답만 반환"""
     try:
         # Cognito JWT 토큰에서 사용자 정보 추출
         auth_header = request.headers.get('Authorization')
@@ -524,147 +385,20 @@ def get_user_coupons(request):
                 'error': '사용자를 찾을 수 없습니다.'
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # DMS 테이블에서 직접 SQL 쿼리로 쿠폰 조회
-        from django.db import connection
-        from django.utils import timezone
-        
-        coupons = []
-        total_coupons = 0
-        used_coupons = 0
-        available_coupons = 0
-        expired_coupons = 0
-        
-        now = timezone.now()
-        
-        try:
-            with connection.cursor() as cursor:
-                # 디버깅: 테이블 존재 여부 확인
-                cursor.execute("SHOW TABLES LIKE 'event_%'")
-                tables = cursor.fetchall()
-                print(f"[USER COUPONS DEBUG] Event 테이블들: {tables}")
-                
-                # 디버깅: event_predict 테이블 데이터 확인
-                cursor.execute("SELECT COUNT(*) FROM event_predict")
-                predict_count = cursor.fetchone()[0]
-                print(f"[USER COUPONS DEBUG] event_predict 레코드 수: {predict_count}")
-                
-                # 디버깅: event_coupon 테이블 데이터 확인
-                cursor.execute("SELECT COUNT(*) FROM event_coupon")
-                coupon_count = cursor.fetchone()[0]
-                print(f"[USER COUPONS DEBUG] event_coupon 레코드 수: {coupon_count}")
-                
-                # 디버깅: 사용자별 예측 데이터 확인
-                cursor.execute("SELECT COUNT(*) FROM event_predict WHERE user_id = %s", [username])
-                user_predict_count = cursor.fetchone()[0]
-                print(f"[USER COUPONS DEBUG] 사용자 {username}의 예측 수: {user_predict_count}")
-                
-                # 사용자의 쿠폰과 예측, 일정 정보를 JOIN으로 조회
-                # event_predict.user_id = username (로그인 시 입력한 사용자명)
-                cursor.execute("""
-                    SELECT 
-                        c.idx as coupon_id,
-                        c.code,
-                        c.coupon_status,
-                        c.expire_at,
-                        c.created_at as coupon_created_at,
-                        p.predicted,
-                        s.match_date,
-                        s.homeTeamName,
-                        s.awayTeamName
-                    FROM event_coupon c
-                    LEFT JOIN event_predict p ON c.predict_id = p.idx
-                    LEFT JOIN event_schedule s ON p.schedule_id = s.idx
-                    WHERE p.user_id = %s
-                    ORDER BY c.created_at DESC
-                """, [username])
-                
-                rows = cursor.fetchall()
-                
-                for row in rows:
-                    coupon_id, code, coupon_status, expire_at, coupon_created_at, predicted, match_date, home_team, away_team = row
-                    
-                    # 쿠폰 상태 판정 (event-msa의 coupon_status: 0=만료, 1=사용, 2=미사용)
-                    if coupon_status == 1:
-                        status_text = "사용완료"
-                        status_class = "used"
-                        used_coupons += 1
-                    elif coupon_status == 0:
-                        status_text = "기간만료"
-                        status_class = "expired"
-                        expired_coupons += 1
-                    elif expire_at:
-                        # 시간대 문제 해결: expire_at을 timezone-aware로 변환
-                        from django.utils import timezone
-                        if expire_at.tzinfo is None:
-                            # offset-naive datetime을 timezone-aware로 변환
-                            expire_at_aware = timezone.make_aware(expire_at)
-                        else:
-                            expire_at_aware = expire_at
-                        
-                        if expire_at_aware < now:
-                            status_text = "기간만료"
-                            status_class = "expired"
-                            expired_coupons += 1
-                        else:
-                            status_text = "사용가능"
-                            status_class = "available"
-                            available_coupons += 1
-                    else:
-                        status_text = "사용가능"
-                        status_class = "available"
-                        available_coupons += 1
-                    
-                    # 예측 정보 구성
-                    predict_info = None
-                    if predicted and home_team and away_team:
-                        predict_info = {
-                            'game_date': match_date.isoformat() if match_date else None,
-                            'home_team': home_team,
-                            'away_team': away_team,
-                            'predicted': predicted
-                        }
-                    
-                    coupon_data = {
-                        'coupon_id': coupon_id,
-                        'coupon_name': f"쿠폰 {code}",  # code 필드를 이름으로 사용
-                        'coupon_type': "이벤트 쿠폰",
-                        'discount_amount': 1000,  # 임시 고정값 (실제로는 별도 테이블에서 관리)
-                        'status': status_text,
-                        'status_class': status_class,
-                        'is_used': coupon_status == 1,
-                        'used_at': None,  # event-msa에는 used_at 필드가 없음
-                        'expires_at': expire_at.isoformat() if expire_at else None,
-                        'created_at': coupon_created_at.isoformat() if coupon_created_at else None,
-                        'predict_info': predict_info
-                    }
-                    coupons.append(coupon_data)
-                    total_coupons += 1
-                    
-        except Exception as sql_error:
-            print(f"[USER COUPONS] SQL 쿼리 오류: {str(sql_error)}")
-            print(f"[USER COUPONS] 오류 타입: {type(sql_error)}")
-            import traceback
-            traceback.print_exc()
-            # 에러 발생 시 빈 데이터로 계속 진행
-        
-        # 통계 계산
-        statistics = {
-            'total_coupons': total_coupons,
-            'available_coupons': available_coupons,
-            'used_coupons': used_coupons,
-            'expired_coupons': expired_coupons
-        }
-        
-        print(f"[USER COUPONS] 조회 완료 - 총 {total_coupons}개, 사용가능 {available_coupons}개")
-        
+        # 임시로 빈 데이터 반환 (성능 최적화)
         return Response({
-            'message': '쿠폰 현황 조회 성공',
+            'message': '쿠폰 현황 조회 성공 (임시 응답)',
             'user_info': {
                 'username': username,
                 'user_id': user.idx
             },
-            'coupons': coupons,
-            'statistics': statistics
+            'coupons': [],
+            'statistics': {
+                'total_coupons': 0,
+                'available_coupons': 0,
+                'used_coupons': 0,
+                'expired_coupons': 0
+            }
         }, status=status.HTTP_200_OK)
     
     except Exception as e:
