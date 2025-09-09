@@ -116,7 +116,7 @@ def confirm_registration(request):
     }, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
-@permission_classes([AllowAny])  # 임시로 모든 요청 허용
+@permission_classes([IsAuthenticated])
 def get_user_info(request):
     """사용자 정보 조회 - 간소화된 인증"""
     try:
@@ -314,7 +314,7 @@ def delete_user_account(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
-@permission_classes([AllowAny])  # 임시로 모든 요청 허용
+@permission_classes([IsAuthenticated])
 def get_user_events(request):
     """사용자 이벤트 참여내역 조회 - DMS 모델 구현 후 직접 DB 조회 예정"""
     try:
@@ -452,7 +452,7 @@ def get_user_events(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
-@permission_classes([AllowAny])  # 임시로 모든 요청 허용
+@permission_classes([IsAuthenticated])
 def get_user_coupons(request):
     """사용자 보유 쿠폰 현황 조회 - DMS 모델 구현 후 직접 DB 조회 예정"""
     try:
