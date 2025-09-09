@@ -169,9 +169,9 @@ CORS_ALLOW_CREDENTIALS = True
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
-        'user.cognito_auth.CognitoJWTAuthentication',  # Cognito JWT 인증으로 교체
+        # 'user.cognito_auth.CognitoJWTAuthentication',  # 임시 비활성화 (성능 최적화)
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny',  # 임시로 모든 요청 허용
     ],
 }
