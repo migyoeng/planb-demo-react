@@ -2,8 +2,8 @@
   "family": "User-Web-Task",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
-  "cpu": "512",
-  "memory": "1024",
+  "cpu": "1024",
+  "memory": "2048",
   "executionRoleArn": "arn:aws:iam::726629337826:role/DugoutTaskExecutionRole",
   "taskRoleArn": "arn:aws:iam::726629337826:role/DugOutTaskRole",
 
