@@ -349,7 +349,9 @@ def get_user_events(request):
         # Django 사용자 조회
         try:
             user = User.objects.get(username=username)
+            print(f"[USER EVENTS] 사용자 조회 성공 - user.idx: {user.idx}, user.username: {user.username}")
         except User.DoesNotExist:
+            print(f"[USER EVENTS] 사용자를 찾을 수 없음 - username: {username}")
             return Response({
                 'error': '사용자를 찾을 수 없습니다.'
             }, status=status.HTTP_404_NOT_FOUND)
@@ -358,6 +360,8 @@ def get_user_events(request):
         try:
             import pymysql
             from django.conf import settings
+            
+            print(f"[USER EVENTS] DMS DB 연결 시도 - Host: {settings.DMS_DB_HOST}, DB: {settings.DMS_DB_NAME}, User: {settings.DMS_DB_USER}")
             
             # DMS 데이터베이스 연결
             dms_connection = pymysql.connect(
@@ -369,7 +373,19 @@ def get_user_events(request):
                 charset='utf8mb4'
             )
             
+            print(f"[USER EVENTS] DMS DB 연결 성공")
+            
             with dms_connection.cursor(pymysql.cursors.DictCursor) as cursor:
+                # 테이블 존재 여부 및 데이터 확인
+                cursor.execute("SHOW TABLES LIKE 'event_%'")
+                tables = cursor.fetchall()
+                print(f"[USER EVENTS] 사용 가능한 테이블: {[table for table in tables]}")
+                
+                # event_predict 테이블의 모든 user_id 확인
+                cursor.execute("SELECT DISTINCT user_id FROM event_predict LIMIT 10")
+                user_ids = cursor.fetchall()
+                print(f"[USER EVENTS] event_predict 테이블의 user_id 목록: {[uid['user_id'] for uid in user_ids]}")
+                
                 # 사용자 예측 내역 조회
                 cursor.execute("""
                     SELECT 
@@ -393,6 +409,9 @@ def get_user_events(request):
                 """, (user.username,))
                 
                 predictions = cursor.fetchall()
+                print(f"[USER EVENTS] 예측 내역 조회 결과 - 개수: {len(predictions)}")
+                if predictions:
+                    print(f"[USER EVENTS] 첫 번째 예측 데이터: {predictions[0]}")
                 
                 # 통계 계산
                 cursor.execute("""
