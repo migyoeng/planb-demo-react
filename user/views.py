@@ -434,7 +434,7 @@ def get_user_events(request):
                         SUM(CASE WHEN p.predicted = CONCAT(s.homeResult, ':', s.awayResult) THEN 1 ELSE 0 END) as correct_predictions
                     FROM event_predict p
                     LEFT JOIN event_schedule s ON p.schedule_id = s.idx
-                    WHERE p.user_id = %s AND s.gameStatus = '종료'
+                    WHERE p.user_id = %s AND s.gameStatus = 'END'
                 """, [user.username])
                 
                 stats_columns = [col[0] for col in cursor.description]
@@ -465,7 +465,7 @@ def get_user_events(request):
             predicted_winner = None
             is_correct = None
             
-            if prediction['gameStatus'] == '종료' and prediction['homeResult'] is not None and prediction['awayResult'] is not None:
+            if prediction['gameStatus'] == 'END' and prediction['homeResult'] is not None and prediction['awayResult'] is not None:
                 # 경기가 종료된 경우 정답 여부 판단
                 if prediction['predicted'] == f"{prediction['homeResult']}:{prediction['awayResult']}":
                     is_correct = True
