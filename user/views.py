@@ -356,36 +356,13 @@ def get_user_events(request):
                 'error': '사용자를 찾을 수 없습니다.'
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # DMS 데이터베이스 연결 및 쿼리 실행
+        # Django ORM으로 복제된 테이블에 접근
         try:
-            # import pymysql
-            from django.conf import settings
+            from django.db import connection
             
-            print(f"[USER EVENTS] DMS DB 연결 시도 - Host: {settings.DMS_DB_HOST}, DB: {settings.DMS_DB_NAME}, User: {settings.DMS_DB_USER}")
+            print(f"[USER EVENTS] Django ORM으로 event 테이블 조회 시작")
             
-            # DMS 데이터베이스 연결
-            dms_connection = pymysql.connect(
-                host=settings.DMS_DB_HOST,
-                user=settings.DMS_DB_USER,
-                password=settings.DMS_DB_PASSWORD,
-                database=settings.DMS_DB_NAME,
-                port=settings.DMS_DB_PORT,
-                charset='utf8mb4'
-            )
-            
-            print(f"[USER EVENTS] DMS DB 연결 성공")
-            
-            with dms_connection.cursor(pymysql.cursors.DictCursor) as cursor:
-                # 테이블 존재 여부 및 데이터 확인
-                cursor.execute("SHOW TABLES LIKE 'event_%'")
-                tables = cursor.fetchall()
-                print(f"[USER EVENTS] 사용 가능한 테이블: {[table for table in tables]}")
-                
-                # event_predict 테이블의 모든 user_id 확인
-                cursor.execute("SELECT DISTINCT user_id FROM event_predict LIMIT 10")
-                user_ids = cursor.fetchall()
-                print(f"[USER EVENTS] event_predict 테이블의 user_id 목록: {[uid['user_id'] for uid in user_ids]}")
-                
+            with connection.cursor() as cursor:
                 # 사용자 예측 내역 조회
                 cursor.execute("""
                     SELECT 
@@ -406,9 +383,10 @@ def get_user_events(request):
                     WHERE p.user_id = %s
                     ORDER BY p.created_at DESC
                     LIMIT 20
-                """, (user.username,))
+                """, [user.username])
                 
-                predictions = cursor.fetchall()
+                columns = [col[0] for col in cursor.description]
+                predictions = [dict(zip(columns, row)) for row in cursor.fetchall()]
                 print(f"[USER EVENTS] 예측 내역 조회 결과 - 개수: {len(predictions)}")
                 if predictions:
                     print(f"[USER EVENTS] 첫 번째 예측 데이터: {predictions[0]}")
@@ -421,16 +399,18 @@ def get_user_events(request):
                     FROM event_predict p
                     LEFT JOIN event_schedule s ON p.schedule_id = s.idx
                     WHERE p.user_id = %s AND s.gameStatus = '종료'
-                """, (user.username,))
+                """, [user.username])
                 
-                stats = cursor.fetchone()
-                total_predictions = stats['total_predictions'] or 0
-                correct_predictions = stats['correct_predictions'] or 0
+                stats_columns = [col[0] for col in cursor.description]
+                stats_row = cursor.fetchone()
+                stats = dict(zip(stats_columns, stats_row)) if stats_row else {}
+                total_predictions = stats.get('total_predictions', 0) or 0
+                correct_predictions = stats.get('correct_predictions', 0) or 0
                 accuracy = (correct_predictions / total_predictions * 100) if total_predictions > 0 else 0
                 
-        except Exception as dms_error:
-            print(f"[USER EVENTS] DMS 데이터베이스 연결 실패: {dms_error}")
-            # DMS 연결 실패 시 빈 데이터 반환
+        except Exception as db_error:
+            print(f"[USER EVENTS] 데이터베이스 조회 실패: {db_error}")
+            # DB 조회 실패 시 빈 데이터 반환
             predictions = []
             total_predictions = 0
             correct_predictions = 0
@@ -551,22 +531,13 @@ def get_user_coupons(request):
                 'error': '사용자를 찾을 수 없습니다.'
             }, status=status.HTTP_404_NOT_FOUND)
         
-        # DMS 데이터베이스 연결 및 쿼리 실행
+        # Django ORM으로 복제된 테이블에 접근
         try:
-            import pymysql
-            from django.conf import settings
+            from django.db import connection
             
-            # DMS 데이터베이스 연결
-            dms_connection = pymysql.connect(
-                host=settings.DMS_DB_HOST,
-                user=settings.DMS_DB_USER,
-                password=settings.DMS_DB_PASSWORD,
-                database=settings.DMS_DB_NAME,
-                port=settings.DMS_DB_PORT,
-                charset='utf8mb4'
-            )
+            print(f"[USER COUPONS] Django ORM으로 event 테이블 조회 시작")
             
-            with dms_connection.cursor(pymysql.cursors.DictCursor) as cursor:
+            with connection.cursor() as cursor:
                 # 사용자 쿠폰 조회
                 cursor.execute("""
                     SELECT 
@@ -586,9 +557,11 @@ def get_user_coupons(request):
                     LEFT JOIN event_schedule s ON p.schedule_id = s.idx
                     WHERE p.user_id = %s
                     ORDER BY c.created_at DESC
-                """, (user.username,))
+                """, [user.username])
                 
-                coupons = cursor.fetchall()
+                columns = [col[0] for col in cursor.description]
+                coupons = [dict(zip(columns, row)) for row in cursor.fetchall()]
+                print(f"[USER COUPONS] 쿠폰 조회 결과 - 개수: {len(coupons)}")
                 
                 # 통계 계산
                 cursor.execute("""
@@ -600,17 +573,19 @@ def get_user_coupons(request):
                     FROM event_coupon c
                     LEFT JOIN event_predict p ON c.predict_id = p.idx
                     WHERE p.user_id = %s
-                """, (user.username,))
+                """, [user.username])
                 
-                stats = cursor.fetchone()
-                total_coupons = stats['total_coupons'] or 0
-                available_coupons = stats['available_coupons'] or 0
-                used_coupons = stats['used_coupons'] or 0
-                expired_coupons = stats['expired_coupons'] or 0
+                stats_columns = [col[0] for col in cursor.description]
+                stats_row = cursor.fetchone()
+                stats = dict(zip(stats_columns, stats_row)) if stats_row else {}
+                total_coupons = stats.get('total_coupons', 0) or 0
+                available_coupons = stats.get('available_coupons', 0) or 0
+                used_coupons = stats.get('used_coupons', 0) or 0
+                expired_coupons = stats.get('expired_coupons', 0) or 0
                 
-        except Exception as dms_error:
-            print(f"[USER COUPONS] DMS 데이터베이스 연결 실패: {dms_error}")
-            # DMS 연결 실패 시 빈 데이터 반환
+        except Exception as db_error:
+            print(f"[USER COUPONS] 데이터베이스 조회 실패: {db_error}")
+            # DB 조회 실패 시 빈 데이터 반환
             coupons = []
             total_coupons = 0
             available_coupons = 0
