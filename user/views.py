@@ -426,6 +426,8 @@ def get_user_events(request):
                 print(f"[USER EVENTS] 예측 내역 조회 결과 - 개수: {len(predictions)}")
                 if predictions:
                     print(f"[USER EVENTS] 첫 번째 예측 데이터: {predictions[0]}")
+                    for i, pred in enumerate(predictions):
+                        print(f"[USER EVENTS] 예측 {i+1}: gameStatus='{pred.get('gameStatus')}', homeResult={pred.get('homeResult')}, awayResult={pred.get('awayResult')}")
                 
                 # 통계 계산
                 cursor.execute("""
@@ -465,15 +467,21 @@ def get_user_events(request):
             predicted_winner = None
             is_correct = None
             
+            print(f"[USER EVENTS] 처리 중: gameStatus='{prediction['gameStatus']}', homeResult={prediction['homeResult']}, awayResult={prediction['awayResult']}")
+            
             if prediction['gameStatus'] == 'END' and prediction['homeResult'] is not None and prediction['awayResult'] is not None:
                 # 경기가 종료된 경우 정답 여부 판단
                 if prediction['predicted'] == f"{prediction['homeResult']}:{prediction['awayResult']}":
                     is_correct = True
                 else:
                     is_correct = False
+                print(f"[USER EVENTS] END 경기 처리: is_correct={is_correct}")
             elif prediction['gameStatus'] == 'BEFORE':
                 # 경기 전인 경우
                 is_correct = None
+                print(f"[USER EVENTS] BEFORE 경기 처리: is_correct={is_correct}")
+            else:
+                print(f"[USER EVENTS] 기타 상태: gameStatus='{prediction['gameStatus']}', is_correct={is_correct}")
             
             formatted_events.append({
                 'predict_id': prediction['predict_id'],
