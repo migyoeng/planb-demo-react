@@ -358,7 +358,7 @@ def get_user_events(request):
         
         # DMS 데이터베이스 연결 및 쿼리 실행
         try:
-            import pymysql
+            # import pymysql
             from django.conf import settings
             
             print(f"[USER EVENTS] DMS DB 연결 시도 - Host: {settings.DMS_DB_HOST}, DB: {settings.DMS_DB_NAME}, User: {settings.DMS_DB_USER}")
