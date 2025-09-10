@@ -399,7 +399,7 @@ def get_user_events(request):
             print(f"[USER EVENTS] Django ORM으로 event 테이블 조회 시작")
             
             with connection.cursor() as cursor:
-                # 사용자 예측 내역 조회
+                # 사용자 예측 내역 조회 (최근 30일)
                 cursor.execute("""
                     SELECT 
                         p.idx as predict_id,
@@ -416,8 +416,8 @@ def get_user_events(request):
                         s.gameStatus
                     FROM event_predict p
                     LEFT JOIN event_schedule s ON p.schedule_id = s.idx
-                    WHERE p.user_id = %s
-                    ORDER BY p.created_at DESC
+                    WHERE p.user_id = %s AND s.match_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+                    ORDER BY s.match_date DESC, p.created_at DESC
                     LIMIT 20
                 """, [user.username])
                 
@@ -427,7 +427,30 @@ def get_user_events(request):
                 if predictions:
                     print(f"[USER EVENTS] 첫 번째 예측 데이터: {predictions[0]}")
                     for i, pred in enumerate(predictions):
-                        print(f"[USER EVENTS] 예측 {i+1}: gameStatus='{pred.get('gameStatus')}', homeResult={pred.get('homeResult')}, awayResult={pred.get('awayResult')}")
+                        print(f"[USER EVENTS] 예측 {i+1}: match_date={pred.get('match_date')}, gameStatus='{pred.get('gameStatus')}', homeResult={pred.get('homeResult')}, awayResult={pred.get('awayResult')}")
+                
+                # 9월 9일 경기 데이터 직접 확인
+                cursor.execute("""
+                    SELECT 
+                        s.idx as schedule_id,
+                        s.match_date,
+                        s.homeTeamName,
+                        s.awayTeamName,
+                        s.homeResult,
+                        s.awayResult,
+                        s.gameStatus,
+                        p.idx as predict_id,
+                        p.user_id,
+                        p.predicted
+                    FROM event_schedule s
+                    LEFT JOIN event_predict p ON s.idx = p.schedule_id AND p.user_id = %s
+                    WHERE s.match_date = '2025-09-09'
+                    ORDER BY s.idx
+                """, [user.username])
+                
+                sept9_columns = [col[0] for col in cursor.description]
+                sept9_data = [dict(zip(sept9_columns, row)) for row in cursor.fetchall()]
+                print(f"[USER EVENTS] 9월 9일 경기 데이터: {sept9_data}")
                 
                 # 통계 계산
                 cursor.execute("""
