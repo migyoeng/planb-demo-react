@@ -251,6 +251,38 @@ def delete_user_account(request):
                 'error': '사용자를 찾을 수 없습니다.'
             }, status=status.HTTP_404_NOT_FOUND)
         
+        # 0단계: Event 서비스에서 사용자 데이터 삭제
+        event_delete_success = False
+        event_delete_message = ""
+        
+        try:
+            import requests
+            from django.conf import settings
+            
+            # Event 서비스 URL 구성 (환경변수에서 가져오거나 기본값 사용)
+            event_service_url = getattr(settings, 'EVENT_SERVICE_URL', 'https://42z6qi4fnd.execute-api.ap-northeast-2.amazonaws.com/prod')
+            event_delete_url = f"{event_service_url}/api/event/delete-user-data/"
+            
+            # Event 서비스에 사용자 데이터 삭제 요청
+            event_response = requests.delete(
+                event_delete_url,
+                json={'user_id': username},
+                timeout=10
+            )
+            
+            if event_response.status_code == 200:
+                event_data = event_response.json()
+                event_delete_success = True
+                event_delete_message = f"Event 데이터 삭제 성공 - 예측: {event_data.get('deleted_predictions', 0)}개, 쿠폰: {event_data.get('deleted_coupons', 0)}개"
+                print(f"[DELETE DEBUG] Event 서비스 데이터 삭제 성공: {event_delete_message}")
+            else:
+                event_delete_message = f"Event 서비스 삭제 실패: {event_response.status_code} - {event_response.text}"
+                print(f"[DELETE DEBUG] Event 서비스 데이터 삭제 실패: {event_delete_message}")
+                
+        except Exception as e:
+            event_delete_message = f"Event 서비스 연결 실패: {str(e)}"
+            print(f"[DELETE DEBUG] Event 서비스 연결 오류: {str(e)}")
+        
         # 1단계: Cognito에서 사용자 삭제 시도
         cognito_success, cognito_message = delete_cognito_user(username)
         
@@ -272,6 +304,7 @@ def delete_user_account(request):
             return Response({
                 'message': '계정이 완전히 삭제되었습니다.',
                 'details': {
+                    'event_status': event_delete_message,
                     'cognito_status': cognito_message,
                     'django_status': django_message,
                     'deleted_user_id': user_id
@@ -283,6 +316,7 @@ def delete_user_account(request):
                 'message': 'Django에서는 삭제되었지만 Cognito 삭제에 실패했습니다.',
                 'warning': 'Cognito 계정이 남아있을 수 있습니다.',
                 'details': {
+                    'event_status': event_delete_message,
                     'cognito_status': cognito_message,
                     'django_status': django_message,
                     'deleted_user_id': user_id
@@ -293,6 +327,7 @@ def delete_user_account(request):
             return Response({
                 'error': 'Cognito는 삭제되었지만 Django 삭제에 실패했습니다.',
                 'details': {
+                    'event_status': event_delete_message,
                     'cognito_status': cognito_message,
                     'django_status': django_message
                 }
@@ -302,6 +337,7 @@ def delete_user_account(request):
             return Response({
                 'error': '계정 삭제에 실패했습니다.',
                 'details': {
+                    'event_status': event_delete_message,
                     'cognito_status': cognito_message,
                     'django_status': django_message
                 }

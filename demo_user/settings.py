@@ -175,3 +175,6 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',  # 다시 활성화
     ],
 }
+
+# Event 서비스 URL 설정 (탈퇴 시 데이터 삭제용)
+EVENT_SERVICE_URL = config('EVENT_SERVICE_URL', default='https://42z6qi4fnd.execute-api.ap-northeast-2.amazonaws.com/prod')
