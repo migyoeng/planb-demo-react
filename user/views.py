@@ -390,7 +390,7 @@ def get_user_events(request):
                     WHERE p.user_id = %s
                     ORDER BY p.created_at DESC
                     LIMIT 20
-                """, (user.idx,))
+                """, (user.username,))
                 
                 predictions = cursor.fetchall()
                 
@@ -402,7 +402,7 @@ def get_user_events(request):
                     FROM event_predict p
                     LEFT JOIN event_schedule s ON p.schedule_id = s.idx
                     WHERE p.user_id = %s AND s.gameStatus = '종료'
-                """, (user.idx,))
+                """, (user.username,))
                 
                 stats = cursor.fetchone()
                 total_predictions = stats['total_predictions'] or 0
@@ -423,13 +423,53 @@ def get_user_events(request):
         total_pages = (total_count + page_size - 1) // page_size
         current_page = 1
         
+        # React에서 예상하는 데이터 구조로 변환
+        formatted_events = []
+        for prediction in predictions:
+            # 예측 결과 분석
+            predicted_winner = None
+            is_correct = None
+            
+            if prediction['gameStatus'] == '종료' and prediction['homeResult'] is not None and prediction['awayResult'] is not None:
+                # 경기가 종료된 경우 정답 여부 판단
+                if prediction['predicted'] == f"{prediction['homeResult']}:{prediction['awayResult']}":
+                    is_correct = True
+                else:
+                    is_correct = False
+            elif prediction['gameStatus'] == 'BEFORE':
+                # 경기 전인 경우
+                is_correct = None
+            
+            formatted_events.append({
+                'predict_id': prediction['predict_id'],
+                'user_id': prediction['user_id'],
+                'predicted': prediction['predicted'],
+                'predict_created_at': prediction['predict_created_at'],
+                'schedule': {
+                    'schedule_id': prediction['schedule_id'],
+                    'match_date': prediction['match_date'],
+                    'startTime': prediction['startTime'],
+                    'homeTeamName': prediction['homeTeamName'],
+                    'awayTeamName': prediction['awayTeamName'],
+                    'homeResult': prediction['homeResult'],
+                    'awayResult': prediction['awayResult'],
+                    'gameStatus': prediction['gameStatus'],
+                    # React에서 사용하는 필드명으로 매핑
+                    'home_team': prediction['homeTeamName'],
+                    'away_team': prediction['awayTeamName'],
+                    'game_date': prediction['match_date']
+                },
+                'predicted_winner': predicted_winner,
+                'is_correct': is_correct
+            })
+
         return Response({
             'message': '이벤트 참여내역 조회 성공',
             'user_info': {
                 'username': username,
                 'user_id': user.idx
             },
-            'events': predictions,
+            'events': formatted_events,
             'statistics': {
                 'total_predictions': total_predictions,
                 'correct_predictions': correct_predictions,
@@ -512,19 +552,22 @@ def get_user_coupons(request):
                 cursor.execute("""
                     SELECT 
                         c.idx as coupon_id,
-                        c.coupon_name,
-                        c.coupon_type,
-                        c.discount_value,
-                        c.minimum_amount,
-                        c.expiry_date,
+                        c.code as coupon_code,
+                        c.coupon_status,
                         c.created_at,
-                        uc.status,
-                        uc.used_at
-                    FROM coupons c
-                    LEFT JOIN user_coupons uc ON c.idx = uc.coupon_id
-                    WHERE uc.user_id = %s
-                    ORDER BY uc.created_at DESC
-                """, (user.idx,))
+                        c.updated_at,
+                        c.expire_at,
+                        p.user_id,
+                        p.predicted,
+                        s.match_date,
+                        s.homeTeamName,
+                        s.awayTeamName
+                    FROM event_coupon c
+                    LEFT JOIN event_predict p ON c.predict_id = p.idx
+                    LEFT JOIN event_schedule s ON p.schedule_id = s.idx
+                    WHERE p.user_id = %s
+                    ORDER BY c.created_at DESC
+                """, (user.username,))
                 
                 coupons = cursor.fetchall()
                 
@@ -532,12 +575,13 @@ def get_user_coupons(request):
                 cursor.execute("""
                     SELECT 
                         COUNT(*) as total_coupons,
-                        SUM(CASE WHEN uc.status = 'available' THEN 1 ELSE 0 END) as available_coupons,
-                        SUM(CASE WHEN uc.status = 'used' THEN 1 ELSE 0 END) as used_coupons,
-                        SUM(CASE WHEN uc.status = 'expired' THEN 1 ELSE 0 END) as expired_coupons
-                    FROM user_coupons uc
-                    WHERE uc.user_id = %s
-                """, (user.idx,))
+                        SUM(CASE WHEN c.coupon_status = 2 THEN 1 ELSE 0 END) as available_coupons,
+                        SUM(CASE WHEN c.coupon_status = 1 THEN 1 ELSE 0 END) as used_coupons,
+                        SUM(CASE WHEN c.coupon_status = 0 THEN 1 ELSE 0 END) as expired_coupons
+                    FROM event_coupon c
+                    LEFT JOIN event_predict p ON c.predict_id = p.idx
+                    WHERE p.user_id = %s
+                """, (user.username,))
                 
                 stats = cursor.fetchone()
                 total_coupons = stats['total_coupons'] or 0
@@ -554,13 +598,46 @@ def get_user_coupons(request):
             used_coupons = 0
             expired_coupons = 0
         
+        # React에서 예상하는 데이터 구조로 변환
+        formatted_coupons = []
+        for coupon in coupons:
+            # 쿠폰 상태를 React가 기대하는 형태로 변환
+            status_class = 'available'
+            status_text = '사용가능'
+            
+            if coupon['coupon_status'] == 1:
+                status_class = 'used'
+                status_text = '사용완료'
+            elif coupon['coupon_status'] == 0:
+                status_class = 'expired'
+                status_text = '기간만료'
+            
+            formatted_coupons.append({
+                'coupon_id': coupon['coupon_id'],
+                'coupon_code': coupon['coupon_code'],
+                'coupon_name': f"경기예측 쿠폰 {coupon['coupon_code']}",  # React가 기대하는 필드
+                'discount_amount': 1000,  # React가 기대하는 필드 (고정값)
+                'status': status_text,  # React가 기대하는 필드
+                'status_class': status_class,  # React가 기대하는 필드 (CSS 클래스용)
+                'created_at': coupon['created_at'],
+                'updated_at': coupon['updated_at'],
+                'expires_at': coupon['expire_at'],  # React가 기대하는 필드명
+                'used_at': coupon['updated_at'] if coupon['coupon_status'] == 1 else None,
+                'match_info': {
+                    'home_team': coupon['homeTeamName'],
+                    'away_team': coupon['awayTeamName'],
+                    'match_date': coupon['match_date'],
+                    'predicted': coupon['predicted']
+                }
+            })
+
         return Response({
             'message': '쿠폰 현황 조회 성공',
             'user_info': {
                 'username': username,
                 'user_id': user.idx
             },
-            'coupons': coupons,
+            'coupons': formatted_coupons,
             'statistics': {
                 'total_coupons': total_coupons,
                 'available_coupons': available_coupons,
