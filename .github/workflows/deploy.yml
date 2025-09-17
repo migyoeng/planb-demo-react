@@ -9,7 +9,7 @@ env:
   AWS_REGION: ap-northeast-2  # 서울 리전
   ECR_NAMESPACE: plan-b  # ECR 네임스페이스 (조직명)
   ECR_REPOSITORY: user-service
-  ECS_CLUSTER: DUGOUT-CLUSTER
+  ECS_CLUSTER: DugOut-Cluster
   ECS_SERVICE: User-Web-Task-service
   CONTAINER_NAME: user-container
   SUBNETS: "subnet-0a0bea261214e5814,subnet-0fbd7b48687332ca2"
