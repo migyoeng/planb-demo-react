@@ -12,11 +12,11 @@ env:
   ECS_CLUSTER: DUGOUT-CLUSTER
   ECS_SERVICE: User-Web-Task-service
   CONTAINER_NAME: user-container
-  SUBNETS: "subnet-00258c4a6ac72c4ce,subnet-0e08b5b05fdad2efc"
-  SECURITY_GROUPS: "sg-0dd82609d8f080a0f"
+  SUBNETS: "subnet-0a0bea261214e5814,subnet-0fbd7b48687332ca2"
+  SECURITY_GROUPS: "sg-033b345fbf0c14c59"
   MIGRATE_TASKDEF_FILE: aws/user-migrate-task.json
   WEB_TASKDEF_FILE: aws/user-web-task.json
-  TARGET_GROUP_ARN: "arn:aws:elasticloadbalancing:ap-northeast-2:726629337826:targetgroup/User-TG/31e8920beb393a4f"
+  TARGET_GROUP_ARN: "arn:aws:elasticloadbalancing:ap-northeast-2:726629337826:targetgroup/User-TG/a3ae7f958b8ff943"
 
 jobs:
   build-and-push:
