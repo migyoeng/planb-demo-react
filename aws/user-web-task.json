@@ -4,7 +4,7 @@
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
   "memory": "2048",
-  "executionRoleArn": "arn:aws:iam::726629337826:role/DugoutTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::726629337826:role/DugOutTaskExecutionRole",
   "taskRoleArn": "arn:aws:iam::726629337826:role/DugOutTaskRole",
 
   "containerDefinitions": [
