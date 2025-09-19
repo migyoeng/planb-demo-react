@@ -50,15 +50,15 @@
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/user/db-FO2fuC:password::"
         },
         {
-          "name": "AWS_COGNITO_USER_POOL_ID",
+          "name": "AWS_USER_POOL_ID",
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/cognito/config-its0k1:cognito_user_pool_id::"
         },
         {
-          "name": "AWS_COGNITO_USER_POOL_CLIENT_ID",
+          "name": "AWS_USER_POOL_CLIENT_ID",
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/cognito/config-its0k1:cognito_client_id::"
         },
         {
-          "name": "AWS_COGNITO_REGION",
+          "name": "AWS_REGION",
           "valueFrom": "arn:aws:secretsmanager:ap-northeast-2:726629337826:secret:prod/cognito/config-its0k1:aws_region::"
         }
       ]
